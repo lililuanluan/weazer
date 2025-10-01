@@ -1,0 +1,23 @@
+# n1-val(N) bug depth = 2
+cd ~/michalis/pctwmversion/luan && ./run.sh "n1-val(10)" 1800 30 2 12
+cd ~/michalis/pctwmversion/luan && ./run.sh "n1-val(50)" 1800 30 2 52
+cd ~/michalis/pctwmversion/luan && ./run.sh "n1-val(100)" 1800 30 2 102
+cd ~/michalis/pctwmversion/luan && ./run.sh "n1-val(200)" 1800 30 2 202
+cd ~/michalis/pctwmversion/luan && ./run.sh "n1-val(500)" 1800 30 2 502
+cd ~/michalis/pctwmversion/luan && ./run.sh "n1-val(1000)" 1800 30 2 1002
+
+# mp(N) bug depth = N+1 k-com= 2(N+1)
+cd ~/michalis/pctwmversion/luan && ./run.sh "mp(5)" 1800 30 5 12
+cd ~/michalis/pctwmversion/luan && ./run.sh "mp(6)" 1800 30 6 13
+cd ~/michalis/pctwmversion/luan && ./run.sh "mp(7)" 1800 30 7 15
+cd ~/michalis/pctwmversion/luan && ./run.sh "mp(8)" 1800 30 8 17
+cd ~/michalis/pctwmversion/luan && ./run.sh "mp(9)" 1800 30 9 19
+cd ~/michalis/pctwmversion/luan && ./run.sh "mp(10)" 1800 30 10 21
+
+# 3N+2
+cd ~/michalis/pctwmversion/luan && ./run.sh "long-assert(2)" 1800 30 8 25	# 8 25
+cd ~/michalis/pctwmversion/luan && ./run.sh "long-assert(3)" 1800 30 11 31
+cd ~/michalis/pctwmversion/luan && ./run.sh "long-assert(4)" 1800 30 14 41
+cd ~/michalis/pctwmversion/luan && ./run.sh "long-assert(5)" 1800 30 17 50
+cd ~/michalis/pctwmversion/luan && ./run.sh "long-assert(6)" 1800 30 20 60
+cd ~/michalis/pctwmversion/luan && ./run.sh "long-assert(7)" 1800 30 23 70
