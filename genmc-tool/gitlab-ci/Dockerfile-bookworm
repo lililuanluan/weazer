@@ -1,0 +1,19 @@
+FROM debian:bookworm
+LABEL maintainer="michalis@mpi-sws.org"
+
+WORKDIR /root
+
+RUN export TERM='xterm-256color'
+
+RUN apt-get clean && apt-get update
+RUN apt-get install -y -qq wget gnupg gnupg2 libtinfo5 bc \
+    autoconf make automake libffi-dev zlib1g-dev libedit-dev \
+    libxml2-dev xz-utils g++ clang git bsdmainutils coreutils
+
+RUN apt-get install -y -qq \
+    clang-13  llvm-13  llvm-13-dev \
+    clang-14  llvm-14  llvm-14-dev \
+    clang-15  llvm-15  llvm-15-dev
+
+# COPY fetch_deps.sh ./fetch_deps.sh
+# RUN ./fetch_deps.sh

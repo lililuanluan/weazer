@@ -1,0 +1,213 @@
+#!/bin/bash
+
+## out files
+OUT_PREFIX="gitlab-ci-"
+OUT_SUFFIX=".yml"
+
+## workflow
+WORKFLOW="workflow:
+  rules:
+    - if: \$CI
+    - if: \$CI_MERGE_REQUEST_ID
+"
+
+## headers
+LINUX_HEADER="default:
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - ./
+    exclude:
+      - .git/
+      - .git/**/*
+"
+MACOS_HEADER="default:
+  tags:
+    - macosx
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - ./
+    exclude:
+      - .git/
+      - .git/**/*
+"
+
+## supported versions
+LINUX_LLVM_VERSIONS="13 14 15 16"
+MACOS_LLVM_VERSIONS="15 16 17"
+
+declare -A LINUX_IMAGES
+declare -A LINUX_IMAGES_VERSIONS
+
+LINUX_IMAGES["imageA"]="registry.mpi-sws.org/genmc-tool-bookworm"
+LINUX_IMAGES["imageB"]="registry.mpi-sws.org/genmc-tool-trixie"
+LINUX_IMAGES_VERSIONS["imageA"]=" 13 14 15 " # spaces --> hack to match regex
+LINUX_IMAGES_VERSIONS["imageB"]=" 16 "
+
+find_image_name() {
+    version=$1
+    for i in "${!LINUX_IMAGES_VERSIONS[@]}"; do
+	if [[ "${LINUX_IMAGES_VERSIONS[$i]}" == *" $version "* ]]; then
+	    echo ${LINUX_IMAGES[$i]}
+	fi
+    done
+}
+
+trunc_llvm_name() {
+    version=$1
+    echo $version | sed 's/\.//g'
+}
+
+## version-specific anchor function
+anchor_shared() {
+    version=$1
+    version_append=$(trunc_llvm_name $version)
+    echo ".llvm:$version: &llvm$version_append"
+}
+
+anchor_linux() {
+    version=$1
+    version_image=$(find_image_name $version)
+    anchor_shared $version
+    echo "  image: $version_image"
+    echo "  variables:"
+    echo "    LLVM_VERSION: \"$version\""
+    echo ""
+}
+
+anchor_macos() {
+    version=$1
+    anchor_shared $version
+    echo "  before_script:"
+    echo "    - export PATH=/usr/local/opt/llvm@${version%%.*}/bin:/usr/local/opt/gnu-getopt/bin:/usr/local/opt/flex/bin:/usr/local/opt/bison/bin:$PATH"
+    echo ""
+}
+
+LINUX_ANCHOR_FUN=anchor_linux
+MACOS_ANCHOR_FUN=anchor_macos
+
+## pipeline stages -- we assume the first stage is a build stage
+LINUX_STAGES="build ftest rtest concurrency bounding test regression"
+MACOS_STAGES="build ftest" ## only run quick stages for macos
+
+LINUX_CONFIG_CMD='./configure --with-llvm=`llvm-config-${LLVM_VERSION} --prefix` || (cat config.log; false)'
+MACOS_CONFIG_CMD='./configure --with-llvm=`llvm-config --prefix` || (cat config.log; false)'
+
+build_stage() {
+    cmd=$1_CONFIG_CMD
+    echo ".build:llvm_job: &build"
+    echo "  stage: build"
+    echo "  script:"
+    echo "    - autoreconf --install"
+    echo "    - ${!cmd}"
+    echo "    - make -j `sysctl -n hw.ncpu`"
+    echo ""
+}
+
+ftest_stage() {
+    echo ".test:llvm_job: &ftest"
+    echo "  stage: ftest"
+    echo "  script:"
+    echo "    - ./scripts/fast-driver.sh"
+    echo ""
+}
+
+rtest_stage() {
+    echo ".test:llvm_job: &rtest"
+    echo "  stage: rtest"
+    echo "  script:"
+    echo "    - ./scripts/randomize-driver.sh"
+    echo "    - GENMCFLAGS=\"-disable-instruction-caching\" ./scripts/randomize-driver.sh"
+    echo ""
+}
+
+concurrency_stage() {
+    echo ".test:llvm_job: &concurrency"
+    echo "  stage: concurrency"
+    echo "  script:"
+    echo "    - ./scripts/run-parallel.sh"
+    echo ""
+}
+
+bounding_stage() {
+    echo ".test:llvm_job: &bounding"
+    echo "  stage: bounding"
+    echo "  script:"
+    echo "    - ./scripts/bound-driver.sh --debug"
+    echo ""
+}
+
+test_stage() {
+    echo ".test:llvm_job: &test"
+    echo "  stage: test"
+    echo "  only:"
+    echo "    - schedules "
+    echo "  script:"
+    echo "    - ./scripts/driver.sh"
+    echo ""
+}
+
+regression_stage() {
+    echo ".test:llvm_job: &regression"
+    echo "  stage: regression"
+    echo "  variables:"
+    echo "    GIT_STRATEGY: clone"
+    echo "  rules:"
+    echo "    - if: \$CI_MERGE_REQUEST_ID"
+    echo "  script:"
+    echo "    - ./scripts/check-regression.sh \$CI_MERGE_REQUEST_TARGET_BRANCH_NAME \$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+    echo ""
+}
+
+for os in LINUX MACOS; do
+    {
+	# print workflow
+	echo "### WORKFLOW"
+	echo "${WORKFLOW}"
+
+	# print header
+	echo "### DEFAULT PARAMETERS"
+	header=${os}_HEADER
+	echo "${!header}"
+
+	# print supported versions
+	echo "### SUPPORTED VERSIONS"
+	versions=${os}_LLVM_VERSIONS
+	anchor_fun=${os}_ANCHOR_FUN
+	for version in ${!versions}; do
+	    ${!anchor_fun} $version
+	done
+
+	# print build stages
+	echo "### PIPELINE STAGES"
+	stages=${os}_STAGES
+	echo "stages:"
+	for stage in ${!stages}; do
+	    echo "  - $stage"
+	done
+	echo ""
+
+	# print stage templates
+	echo "### JOB TEMPLATES"
+	for stage in ${!stages}; do
+	    stage_anchor=${stage}_stage
+	    $stage_anchor $os
+	done
+
+	# print all versions for each stage
+	for stage in ${!stages}; do
+	    echo "### ${stage^^}"
+	    for version in ${!versions}; do
+		version_append=$(trunc_llvm_name $version)
+		echo "$stage:llvm-$version:"
+		if [[ $stage != "build" ]]; then
+		    echo "  needs: [\"build:llvm-$version\"]"
+		fi
+		echo "  <<: *llvm$version_append"
+		echo "  <<: *$stage"
+		echo ""
+	    done
+	done
+    }> "${OUT_PREFIX}${os,,}${OUT_SUFFIX}"
+done

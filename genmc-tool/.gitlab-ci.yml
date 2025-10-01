@@ -1,0 +1,47 @@
+## Hack for merge-request pipelines:
+##
+## In order to run the same, triggered, child pipeline
+## for a merge request simply with some additional stages
+## we have to do the following:
+##
+##   1. Run the parent pipeline on merge requests. However,
+##      so as to not stop running it in regular branches,
+##      we also add a $CI rule that always triggers.
+##      This is achieved via a `workflow`.
+##   2. Similarly, enable all child jobs both on regular
+##      and merge-request pipelines (again via `workflow`).
+##   3. Add an `only` rule on the jobs that are supposed
+##      to run on merge requests only.
+#
+workflow:
+  rules:
+    - if: $CI
+    - if: $CI_MERGE_REQUEST_ID
+
+stages:
+  - generate_configs
+  - run_pipelines
+
+generate-config:
+  stage: generate_configs
+  script: cd gitlab-ci && ./generate-configs
+  artifacts:
+    paths:
+      - gitlab-ci/gitlab-ci-macos.yml
+      - gitlab-ci/gitlab-ci-linux.yml
+
+macos:
+  stage: run_pipelines
+  trigger:
+    include:
+      - artifact: gitlab-ci/gitlab-ci-macos.yml
+        job: generate-config
+    strategy: depend
+
+linux:
+  stage: run_pipelines
+  trigger:
+    include:
+      - artifact: gitlab-ci/gitlab-ci-linux.yml
+        job: generate-config
+    strategy: depend
