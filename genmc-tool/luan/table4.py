@@ -17,9 +17,8 @@ benchmarks_1, benchmarks_2 = split_list(benchmarks)
 
 def print_bench_line(benchname):
     line = benchname
-    method_data = {}  # 存储每个method的数据用于比较
+    method_data = {}
     
-    # 先收集所有method的数据
     for method in ["no", "star" ,"3phstar"]:
         dff = df[(df["Method"] == method) & (df["Benchmark"] == benchname)].head(30)
         sec = dff["Sec"]
@@ -27,7 +26,6 @@ def print_bench_line(benchname):
         dff_data = dff.dropna()
         sec_data = dff_data["Sec"]
         
-        # 计算统计数据
         has_data = len(sec_data) > 0
         mean_sec = sec_data.mean() if has_data else float('inf')
         std_sec = sec_data.std() if has_data and len(sec_data) > 1 else 0

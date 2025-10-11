@@ -61,10 +61,8 @@ def cox_regression_analysis(df, method1="Random", method2="3phstar", duration_co
     
     filtered_df["Event"] = 1
     
-    # 准备Cox模型数据
     cox_data = filtered_df[[duration_col, "Group", "Benchmark", "Event"]].copy()
     
-    # 检查数据
     print(f"Cox regression data shape: {cox_data.shape}")
     print(f"Duration column ({duration_col}) statistics:")
     print(cox_data[duration_col].describe())
@@ -167,13 +165,10 @@ def main():
     print(f"Sec column statistics:")
     print(df["Sec"].describe())
     
-    # Overall analysis
     overall_z, overall_p = overall_analysis(df)
     
-    # Group analysis
     benchmark_results = analyze_by_benchmark_groups(df)
     
-    # Summary results
     print("\n" + "="*80)
     print("SUMMARY OF RESULTS")
     print("="*80)

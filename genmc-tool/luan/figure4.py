@@ -9,7 +9,6 @@ from scipy import interpolate
 
 def load_files(benchname, folder_path):
     all_files = os.listdir(folder_path)
-    # Define matching patterns
     random_pattern = re.compile(rf"^{re.escape(benchname)}-Random-(\d+)$")
     star_pattern = re.compile(rf"^{re.escape(benchname)}-3phstar-(\d+)$")
     random_files = []
@@ -52,9 +51,7 @@ def load_benchmark_data(benchname, folder_path="out/buggy/coverage/"):
         except Exception as e:
             print(f'Error reading "{filename}": {e}')
 
-    # 查找并读取3phstar方法的文件
 
-    # 按序号排序并读取
     for i, filename in sorted(star_files, key=lambda x: x[0]):
         filepath = os.path.join(folder_path, filename)
         try:
@@ -67,37 +64,29 @@ def load_benchmark_data(benchname, folder_path="out/buggy/coverage/"):
 
 
 def process_method_data_corrected(data_list, time_points=1000):
-    """正确处理每个时间点的均值和标准差，只包含仍在运行的测试"""
     if not data_list:
         return None, None, None
 
-    # 找到所有数据的时间范围
     all_end_times = [df["SecElapsed"].iloc[-1] for df in data_list]
     max_end_time = max(all_end_times)
 
-    # 创建统一的时间点
     uniform_times = np.linspace(0, max_end_time, time_points)
 
-    # 为每个时间点收集仍在运行的测试的数据
     cover_values_at_times = []
 
     for t in uniform_times:
         covers_at_t = []
         for df in data_list:
-            # 找到这个测试在时间t时的覆盖度
-            # 如果测试在时间t之前已经结束，使用最后一个值
             if t <= df["SecElapsed"].iloc[-1]:
-                # 找到时间t对应的覆盖度（插值或最近的值）
                 idx = np.searchsorted(df["SecElapsed"].values, t)
                 if idx == 0:
                     cover = df["Cover"].iloc[0]
                 elif idx == len(df):
                     cover = df["Cover"].iloc[-1]
                 else:
-                    # 线性插值
                     t0, t1 = df["SecElapsed"].iloc[idx - 1], df["SecElapsed"].iloc[idx]
                     c0, c1 = df["Cover"].iloc[idx - 1], df["Cover"].iloc[idx]
-                    if t1 > t0:  # 避免除零
+                    if t1 > t0:
                         cover = c0 + (c1 - c0) * (t - t0) / (t1 - t0)
                     else:
                         cover = c0
