@@ -8,20 +8,18 @@ from scipy import stats
 
 def load_synthetic_data(data_dir="out/synthetic/"):
     """
-    加载synthetic目录下的所有CSV文件数据
     
     Returns:
-        pd.DataFrame: 合并后的数据框
+        pd.DataFrame: 
     """
     all_data = []
     
-    # 获取所有CSV文件
     csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
     
     for file_path in csv_files:
         try:
             df = pd.read_csv(file_path)
-            if len(df) > 1:  # 只处理有数据的文件
+            if len(df) > 1:
                 all_data.append(df)
                 print(f"Loaded {len(df)} records from {os.path.basename(file_path)}")
         except Exception as e:
@@ -38,19 +36,17 @@ def load_synthetic_data(data_dir="out/synthetic/"):
 
 def cox_regression_analysis(df, method1="Random", method2="3phstar", duration_col="Sec"):
     """
-    使用Cox回归分析比较两种方法的性能差异
     
     Args:
-        df: 数据框
-        method1: 第一种方法名称
-        method2: 第二种方法名称
-        duration_col: 持续时间列名 (Sec)
+        df: 
+        method1: 
+        method2: 
+        duration_col: 
     
     Returns:
         tuple: (z_value, p_value)
     """
     
-    # 过滤出指定方法的数据
     filtered_df = df[df["Method"].isin([method1, method2])].copy()
     
     if len(filtered_df) == 0:
@@ -61,10 +57,8 @@ def cox_regression_analysis(df, method1="Random", method2="3phstar", duration_co
     print(f"  {method1}: {len(filtered_df[filtered_df['Method'] == method1])} records")
     print(f"  {method2}: {len(filtered_df[filtered_df['Method'] == method2])} records")
     
-    # 创建分组变量：0表示method1，1表示method2
     filtered_df["Group"] = filtered_df["Method"].map({method1: 0, method2: 1})
     
-    # 为Cox回归添加事件列（假设所有观测都是完整的事件，没有删失）
     filtered_df["Event"] = 1
     
     # 准备Cox模型数据
@@ -76,11 +70,9 @@ def cox_regression_analysis(df, method1="Random", method2="3phstar", duration_co
     print(cox_data[duration_col].describe())
     
     try:
-        # 拟合Cox模型，使用Benchmark作为分层变量
         cph = CoxPHFitter()
         cph.fit(cox_data, duration_col=duration_col, event_col="Event", strata="Benchmark")
         
-        # 获取结果
         z_value = cph.summary.loc["Group", "z"]
         p_value = cph.summary.loc["Group", "p"]
         hazard_ratio = cph.summary.loc["Group", "exp(coef)"]
@@ -103,7 +95,6 @@ def cox_regression_analysis(df, method1="Random", method2="3phstar", duration_co
             
         print(f"Significance: {significance}")
         
-        # 解释结果
         if z_value > 0:
             faster_method = method2
             slower_method = method1
@@ -123,13 +114,11 @@ def cox_regression_analysis(df, method1="Random", method2="3phstar", duration_co
 
 def analyze_by_benchmark_groups(df):
     """
-    按benchmark分组进行分析
     """
     print("\n" + "="*80)
     print("ANALYSIS BY BENCHMARK GROUPS")
     print("="*80)
     
-    # 获取所有benchmark类型
     benchmarks = df["Benchmark"].unique()
     print(f"Found benchmarks: {benchmarks}")
     
@@ -139,7 +128,6 @@ def analyze_by_benchmark_groups(df):
         print(f"\n--- Analysis for {benchmark} ---")
         benchmark_data = df[df["Benchmark"] == benchmark]
         
-        # 检查是否有Random和3phstar数据
         methods = benchmark_data["Method"].unique()
         if "Random" in methods and "3phstar" in methods:
             z_val, p_val = cox_regression_analysis(benchmark_data, "Random", "3phstar")
@@ -153,7 +141,6 @@ def analyze_by_benchmark_groups(df):
 
 def overall_analysis(df):
     """
-    整体分析所有数据
     """
     print("\n" + "="*80)
     print("OVERALL ANALYSIS (ALL BENCHMARKS COMBINED)")
@@ -165,7 +152,6 @@ def overall_analysis(df):
 
 def main():
     """
-    主函数：执行完整的分析流程
     """
     print("Loading synthetic data...")
     df = load_synthetic_data()
@@ -181,13 +167,13 @@ def main():
     print(f"Sec column statistics:")
     print(df["Sec"].describe())
     
-    # 整体分析
+    # Overall analysis
     overall_z, overall_p = overall_analysis(df)
     
-    # 分组分析
+    # Group analysis
     benchmark_results = analyze_by_benchmark_groups(df)
     
-    # 汇总结果
+    # Summary results
     print("\n" + "="*80)
     print("SUMMARY OF RESULTS")
     print("="*80)

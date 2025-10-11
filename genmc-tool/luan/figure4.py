@@ -9,7 +9,7 @@ from scipy import interpolate
 
 def load_files(benchname, folder_path):
     all_files = os.listdir(folder_path)
-    # 定义匹配模式
+    # Define matching patterns
     random_pattern = re.compile(rf"^{re.escape(benchname)}-Random-(\d+)$")
     star_pattern = re.compile(rf"^{re.escape(benchname)}-3phstar-(\d+)$")
     random_files = []
@@ -43,7 +43,7 @@ def load_benchmark_data(benchname, folder_path="out/buggy/coverage/"):
 
     random_files, star_files = load_files(benchname, folder_path)
 
-    # 按序号排序并读取
+    # Sort by number and read
     for i, filename in sorted(random_files, key=lambda x: x[0]):
         filepath = os.path.join(folder_path, filename)
         try:
