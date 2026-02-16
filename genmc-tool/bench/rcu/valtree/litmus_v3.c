@@ -40,8 +40,8 @@ int cpu1 = 1;
 int r_x;
 int r_y;
 
-int x;
-int y;
+_Atomic int x;
+_Atomic int y;
 
 void *thread_reader(void *arg)
 {

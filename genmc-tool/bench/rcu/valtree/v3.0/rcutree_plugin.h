@@ -176,9 +176,9 @@ static void rcu_preempt_note_context_switch(int cpu)
 		 * But first, note that the current CPU must still be
 		 * on line!
 		 */
-		WARN_ON_ONCE((rdp->grpmask & rnp->qsmaskinit) == 0);
+		WARN_ON_ONCE((rdp->grpmask & ACCESS_ONCE(rnp->qsmaskinit)) == 0);
 		WARN_ON_ONCE(!list_empty(&t->rcu_node_entry));
-		if ((rnp->qsmask & rdp->grpmask) && rnp->gp_tasks != NULL) {
+		if ((ACCESS_ONCE(rnp->qsmask) & rdp->grpmask) && rnp->gp_tasks != NULL) {
 			list_add(&t->rcu_node_entry, rnp->gp_tasks->prev);
 			rnp->gp_tasks = &t->rcu_node_entry;
 #ifdef CONFIG_RCU_BOOST
@@ -187,7 +187,7 @@ static void rcu_preempt_note_context_switch(int cpu)
 #endif /* #ifdef CONFIG_RCU_BOOST */
 		} else {
 			list_add(&t->rcu_node_entry, &rnp->blkd_tasks);
-			if (rnp->qsmask & rdp->grpmask)
+			if (ACCESS_ONCE(rnp->qsmask) & rdp->grpmask)
 				rnp->gp_tasks = &t->rcu_node_entry;
 		}
 		raw_spin_unlock_irqrestore(&rnp->lock, flags);
@@ -250,7 +250,7 @@ static void rcu_report_unblock_qs_rnp(struct rcu_node *rnp, unsigned long flags)
 	unsigned long mask;
 	struct rcu_node *rnp_p;
 
-	if (rnp->qsmask != 0 || rcu_preempt_blocked_readers_cgp(rnp)) {
+	if (ACCESS_ONCE(rnp->qsmask) != 0 || rcu_preempt_blocked_readers_cgp(rnp)) {
 		raw_spin_unlock_irqrestore(&rnp->lock, flags);
 		return;  /* Still need more quiescent states! */
 	}
@@ -672,7 +672,7 @@ void synchronize_rcu(void)
 EXPORT_SYMBOL_GPL(synchronize_rcu);
 
 static DECLARE_WAIT_QUEUE_HEAD(sync_rcu_preempt_exp_wq);
-static long sync_rcu_preempt_exp_count;
+static _Atomic long sync_rcu_preempt_exp_count;
 static DEFINE_MUTEX(sync_rcu_preempt_exp_mutex);
 
 /*
@@ -803,7 +803,7 @@ void synchronize_rcu_expedited(void)
 	/* Initialize ->expmask for all non-leaf rcu_node structures. */
 	rcu_for_each_nonleaf_node_breadth_first(rsp, rnp) {
 		raw_spin_lock(&rnp->lock); /* irqs already disabled. */
-		rnp->expmask = rnp->qsmaskinit;
+		rnp->expmask = ACCESS_ONCE(rnp->qsmaskinit);
 		raw_spin_unlock(&rnp->lock); /* irqs remain disabled. */
 	}
 
@@ -822,7 +822,7 @@ void synchronize_rcu_expedited(void)
 
 	/* Clean up and exit. */
 	smp_mb(); /* ensure expedited GP seen before counter increment. */
-	ACCESS_ONCE(sync_rcu_preempt_exp_count)++;
+	atomic_fetch_add_explicit(&sync_rcu_preempt_exp_count, 1, memory_order_relaxed);
 unlock_mb_ret:
 	mutex_unlock(&sync_rcu_preempt_exp_mutex);
 mb_ret:
@@ -1119,7 +1119,7 @@ static void rcu_initiate_boost_trace(struct rcu_node *rnp)
 		rnp->n_balk_exp_gp_tasks++;
 	else if (rnp->gp_tasks != NULL && rnp->boost_tasks != NULL)
 		rnp->n_balk_boost_tasks++;
-	else if (rnp->gp_tasks != NULL && rnp->qsmask != 0)
+	else if (rnp->gp_tasks != NULL && ACCESS_ONCE(rnp->qsmask) != 0)
 		rnp->n_balk_notblocked++;
 	else if (rnp->gp_tasks != NULL &&
 		 ULONG_CMP_LT(jiffies, rnp->boost_time))
@@ -1268,7 +1268,7 @@ static void rcu_initiate_boost(struct rcu_node *rnp, unsigned long flags)
 	if (rnp->exp_tasks != NULL ||
 	    (rnp->gp_tasks != NULL &&
 	     rnp->boost_tasks == NULL &&
-	     rnp->qsmask == 0 &&
+	     ACCESS_ONCE(rnp->qsmask) == 0 &&
 	     ULONG_CMP_GE(jiffies, rnp->boost_time))) {
 		if (rnp->exp_tasks == NULL)
 			rnp->boost_tasks = rnp->gp_tasks;
@@ -1629,7 +1629,7 @@ static void rcu_node_kthread_setaffinity(struct rcu_node *rnp, int outgoingcpu)
 {
 	cpumask_var_t cm;
 	int cpu;
-	unsigned long mask = rnp->qsmaskinit;
+	unsigned long mask = ACCESS_ONCE(rnp->qsmaskinit);
 
 	if (rnp->node_kthread_task == NULL)
 		return;
@@ -1665,7 +1665,7 @@ static int __cpuinit rcu_spawn_one_node_kthread(struct rcu_state *rsp,
 	struct task_struct *t;
 
 	if (!rcu_scheduler_fully_active ||
-	    rnp->qsmaskinit == 0)
+	    ACCESS_ONCE(rnp->qsmaskinit) == 0)
 		return 0;
 	if (rnp->node_kthread_task == NULL) {
 		t = kthread_create(rcu_node_kthread, (void *)rnp,

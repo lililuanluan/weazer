@@ -266,14 +266,14 @@ void wait_for_completion(struct completion *x)
 	might_sleep();
 
         fake_release_cpu(get_cpu()); 
-	while (!x->done)
+	while (!ACCESS_ONCE(x->done))
 		;
 	fake_acquire_cpu(get_cpu());
 }
 	
 void complete(struct completion *x)
 {
-	x->done++;
+	WRITE_ONCE(x->done, ACCESS_ONCE(x->done) + 1);
 }
 
 #endif /* __FAKE_SYNC_H */

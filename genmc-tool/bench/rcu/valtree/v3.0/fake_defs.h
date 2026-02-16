@@ -25,6 +25,8 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <assert.h>
+#include <stdbool.h>
+#include <stdatomic.h>
 
 /* Definitions taken from the Linux Kernel (v.3.0) */
 
@@ -71,18 +73,19 @@
 # define __maybe_unused         /* unimplemented */
 #endif
 
-#define ACCESS_ONCE(x) (*(volatile __typeof__(x) *)&(x))
+#define ACCESS_ONCE(x) __atomic_load_n(&(x), __ATOMIC_RELAXED)
+#define WRITE_ONCE(x, v) __atomic_store_n(&(x), (v), __ATOMIC_RELAXED)
 #define ATOMIC_INIT(i)  { (i) }
 
 /* Optimization barrier */
 /* The "volatile" is due to gcc bugs */
-#define barrier() __asm__ volatile("": : :"memory")
+#define barrier() atomic_signal_fence(memory_order_seq_cst)
 
 /* Other barriers -- x86 config by default */
 #ifdef PSO
-# define mb()    __asm__ volatile("mfence":::"memory")
-# define rmb()   __asm__ volatile("lfence":::"memory")
-# define wmb()   __asm__ volatile("sfence" ::: "memory")
+# define mb()    atomic_thread_fence(memory_order_seq_cst)
+# define rmb()   atomic_thread_fence(memory_order_acquire)
+# define wmb()   atomic_thread_fence(memory_order_release)
 
 # define dma_rmb()       barrier()
 # define dma_wmb()       barrier()
@@ -96,17 +99,12 @@
 
 # define smp_store_release(p, v)			\
 	do {						\
-		barrier();				\
-		smp_mb();				\
-		ACCESS_ONCE(*p) = (v);			\
+		atomic_store_explicit((_Atomic __typeof__(*p) *)(p), (v), memory_order_release); \
 	} while (0)
 
 # define smp_load_acquire(p)				\
 	({						\
-		__typeof__(*p) ___p1 = ACCESS_ONCE(*p);	\
-							\
-		barrier();				\
-		___p1;					\
+		atomic_load_explicit((_Atomic __typeof__(*p) *)(p), memory_order_acquire); \
 	})
 
 # define smp_mb__before_atomic() smp_mb()
@@ -116,9 +114,9 @@
 
 # define smp_mb__after_unlock_lock()     do { } while (0)
 #else /* #ifdef PSO */
-# define mb()    __asm__ volatile("mfence":::"memory")
-# define rmb()   __asm__ volatile("lfence":::"memory")
-# define wmb()   __asm__ volatile("sfence" ::: "memory")
+# define mb()    atomic_thread_fence(memory_order_seq_cst)
+# define rmb()   atomic_thread_fence(memory_order_acquire)
+# define wmb()   atomic_thread_fence(memory_order_release)
 
 # define dma_rmb()       barrier()
 # define dma_wmb()       barrier()
@@ -132,16 +130,12 @@
 
 # define smp_store_release(p, v)			\
 	do {						\
-		barrier();				\
-		ACCESS_ONCE(*p) = (v);			\
+		atomic_store_explicit((_Atomic __typeof__(*p) *)(p), (v), memory_order_release); \
 	} while (0)
 
 # define smp_load_acquire(p)				\
 	({						\
-		__typeof__(*p) ___p1 = ACCESS_ONCE(*p);	\
-							\
-		barrier();				\
-		___p1;					\
+		atomic_load_explicit((_Atomic __typeof__(*p) *)(p), memory_order_acquire); \
 	})
 
 # define smp_mb__before_atomic() barrier()
@@ -154,20 +148,20 @@
 
 /* Atomic data types */
 typedef struct {
-	int counter;
+	_Atomic int counter;
 } atomic_t;
 
 typedef struct {
-	long counter;
+	_Atomic long counter;
 } atomic_long_t;
 
 /* Boolean data types */
-typedef _Bool bool;
+// typedef _Bool bool;
 
-enum {
-	false	= 0,
-	true	= 1
-};
+// enum {
+// 	false	= 0,
+// 	true	= 1
+// };
 
 /* Integer types */
 typedef unsigned long ulong;
@@ -196,7 +190,7 @@ typedef unsigned long long u64;
 #define LLONG_MAX	((long long)(~0ULL>>1))
 #define LLONG_MIN	(-LLONG_MAX - 1)
 #define ULLONG_MAX	(~0ULL)
-#define SIZE_MAX	(~(size_t)0)
+// #define SIZE_MAX	(~(size_t)0)
 
 #define U8_MAX		((u8)~0U)
 #define S8_MAX		((s8)(U8_MAX>>1))
@@ -589,18 +583,18 @@ int noassert;
  * Note that these operations are supported under SC, TSO and PSO in Nidhugg,
  * but only for the model __ATOMIC_SEQ_CST, even if otherwise specified.
  */
-#define atomic_add(i, v) __atomic_add_fetch(&(v)->counter, i, __ATOMIC_RELAXED)
+#define atomic_add(i, v) (atomic_fetch_add_explicit(&(v)->counter, i, memory_order_relaxed) + (i)) // returns the added value`
 #define atomic_add_return(i, v) atomic_add(i, v)
-#define atomic_sub(i, v) __atomic_sub_fetch(&(v)->counter, i, __ATOMIC_RELAXED)
+#define atomic_sub(i, v) (atomic_fetch_sub_explicit(&(v)->counter, i, memory_order_relaxed) - (i))
 #define atomic_inc(v) atomic_add(1, v)
 #define atomic_inc_return(v) atomic_inc(v)
 #define atomic_dec(v) atomic_sub(1, v)
 #define atomic_dec_and_test(v) !atomic_dec(v)
-#define atomic_set(v, i) (v)->counter = i
-#define atomic_read(v) ACCESS_ONCE((v)->counter)
+#define atomic_set(v, i) atomic_store_explicit(&(v)->counter, i, memory_order_relaxed)
+#define atomic_read(v) atomic_load_explicit(&(v)->counter, memory_order_relaxed)
 #define atomic_cmpxchg(v, old, new)					\
-	__atomic_compare_exchange(&(v)->counter, &old, &new, 0,		\
-				  __ATOMIC_RELAXED, __ATOMIC_RELAXED)
+	atomic_compare_exchange_strong_explicit(&(v)->counter, &old, new,\
+				  memory_order_relaxed, memory_order_relaxed)
 
 #define atomic_long_add(i, v) atomic_add(i, v)
 #define atomic_long_add_return(i, v) atomic_add_return(i, v)
@@ -623,7 +617,8 @@ int noassert;
 #define prefetch(next) do { } while (0)
 
 /* More CPU-relevant definitions, CONFIG_HOTPLUG_CPU=n  */
-unsigned long volatile __jiffy_data jiffies;
+// unsigned long volatile __jiffy_data jiffies;
+_Atomic unsigned long jiffies;
 
 #define cpu_is_offline(cpu) 0
 #define cpu_is_online(cpu) 1
@@ -652,7 +647,7 @@ unsigned long volatile __jiffy_data jiffies;
 
 
 /* Declarations to emulate CPU, interrupts, and scheduling.  */
-void __VERIFIER_assume(int);
+// void __VERIFIER_assume(int);
 
 int get_cpu(void);
 void set_cpu(int);
